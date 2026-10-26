@@ -1,43 +1,41 @@
-# Cognitrace AI — Frontend
+# Cognitrace frontend
 
-Responsive React + TypeScript MVP for reflecting on problem-solving sessions. It includes the dashboard, session history, a chat/session flow, session reflections, evidence-linked candidate patterns, recommendations, and privacy settings.
+React + TypeScript + Vite frontend for Cognitrace. Existing screens and styling remain, but real API mode is intentionally limited to routes the FastAPI backend implements.
 
-## Run locally
+## Local setup (PowerShell)
 
-```bash
+~~~powershell
 cd frontend
-npm install
+npm ci
+Copy-Item .env.example .env.local
 npm run dev
-```
+~~~
 
-For a production build, run `npm run build`; serve the generated `dist/` folder with a static host configured to fall back to `index.html` for hash routes.
+The Vite development server prints its local URL (normally http://localhost:5173). To make a production build, run npm run build. To run adapter unit tests offline, run npm test.
 
-## Demo mode and API integration
+## Modes
 
-The app starts in clearly labeled demo mode. It uses typed mock responses and stores demo session history in browser `localStorage`, so no backend is required for the UI walkthrough. Demo analysis and recommendations are labeled as examples and should not be represented as real AI results.
+VITE_USE_MOCK_API=true is the safe default. The UI shows a DEMO MODE badge and mock conversations, analysis, patterns, and recommendations are explicitly examples, not generated responses.
 
-Copy `.env.example` to `.env.local` when configuring the frontend. Set `VITE_API_BASE_URL` to the FastAPI origin plus `/api/v1`, then set `VITE_USE_MOCK_API=false` to use the backend. The API client is in `src/api/client.ts`; it is the only module that makes network requests. Never put Gemini credentials in frontend environment variables.
+Real mode uses Supabase Auth, keeps its user token in memory only, and submits the complete set of notes once when the user completes a session. Drafts do not persist across refreshes. The backend supports session create-and-extract, history, and individual reads. It does not yet support incremental AI chat, deletion, pattern-history retrieval, recommendations, or feedback; those controls are not presented as working integrations.
 
-## API contract assumptions to confirm with the backend teammate
+## Environment variables
 
-The client assumes the architecture's versioned routes:
+Copy the placeholders from .env.example to .env.local:
 
-| Method | Route | Frontend expectation |
-| --- | --- | --- |
-| POST | `/auth/register`, `/auth/login` | Auth endpoints are planned; auth screens should be wired when token/cookie behavior is agreed. |
-| GET | `/auth/me` | `{ id, name, email }` |
-| GET | `/sessions` | `Session[]` with `id`, `title`, `topic`, `date`, `status`, `duration`, `messages[]` |
-| POST | `/sessions` | JSON `{ title }`, returns a `Session` |
-| POST | `/sessions/{id}/messages` | JSON `{ content }`, returns `Message[]` |
-| POST | `/sessions/{id}/complete` | Completes session; analysis can be retrieved afterward |
-| DELETE | `/sessions/{id}` | Deletes the session and user-visible associated data |
-| GET | `/analysis/{id}` | `{ summary, traces: [{ type, content, evidence }], reflection }` |
-| GET | `/patterns` | `Pattern[]` with evidence session names/IDs and confidence in `0..1` |
-| GET | `/recommendations` | `[{ content }]` |
-| POST | `/feedback` | JSON `{ target_id, value }`, where value is `helpful` or `not_helpful` |
+- VITE_API_BASE_URL: non-secret backend URL; defaults to https://cognitrace-ai.onrender.com/api.
+- VITE_USE_MOCK_API: keep true until the backend, Supabase Auth, and ownership controls have been configured and deployed.
+- VITE_SUPABASE_URL: public project URL.
+- VITE_SUPABASE_PUBLISHABLE_KEY: public client key intended for browser use. It is not a Supabase secret/service-role key.
 
-These are UI-facing assumptions based on the architecture document; the backend's Pydantic/OpenAPI schema should be the source of truth. Session field names, analysis job status, evidence identifiers, and feedback shape still need agreement before production integration. Patterns remain tentative observations and should be traceable to supporting sessions.
+Do not put GEMINI_API_KEY, COGNITRACE_API_TOKEN, a Supabase secret key, or any server credential in a VITE_* variable. Vite embeds those values into public JavaScript.
 
-## Current scope
+The backend must have SUPABASE_URL, a Gemini key, CORS_ALLOWED_ORIGINS, and COGNITRACE_DB_PATH set on the server. For bearer headers, the backend keeps allow_credentials=false and the client uses credentials: omit.
 
-The login screen expects `POST /auth/login` to return `{ access_token, token_type }`; the token is kept in memory only and sent as a Bearer token. Registration posts `{ name, email, password }` and then signs in. The client calls `/auth/me` after login. Confirm whether the backend uses these exact auth schemas or an HttpOnly cookie before integration. Session field names, analysis job status, evidence identifiers, and feedback shape also need agreement. Mock chat replies are neutral reflection prompts and are not generated by Gemini.
+## Current backend mapping
+
+- POST /sessions posts { "session_text": "..." } and returns the existing workflow result.
+- GET /sessions?limit=100&offset=0 reads the authenticated user's history.
+- GET /sessions/{session_id} reads one session owned by the current user.
+
+The base URL already ends in /api; these route paths are appended by src/api/backendAdapter.ts. No unsupported auth, message, analysis, delete, pattern, recommendation, or feedback API routes are called.
