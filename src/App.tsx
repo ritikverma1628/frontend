@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api, clearAuth, mockMode } from "./api/client";
 import type { Analysis, Message, Pattern, Route, Session, User } from "./types";
 
@@ -247,7 +247,7 @@ export default function App() {
     );
 
   return (
-    <div className="app-shell">
+    <div className="app-shell app-shell-studio">
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <a className="brand" href="#/overview">
           <span className="brand-mark">
@@ -259,7 +259,7 @@ export default function App() {
           </span>
         </a>
         <div className="side-label">WORKSPACE</div>
-        <nav className="side-nav">
+        <nav className="side-nav" aria-label="Primary navigation">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -348,7 +348,7 @@ export default function App() {
           >
             <Icon name="menu" />
           </button>
-          <div className="breadcrumbs">
+          <div className="breadcrumbs" aria-label="Current page">
             Workspace <Icon name="chevron" size={14} />
             <strong>{routeTitle(route)}</strong>
           </div>
@@ -380,7 +380,7 @@ export default function App() {
             </button>
           </div>
         </header>
-        <div className="page-content">
+        <div className={`page-content page-content-${route}`}>
           {error && (
             <div className="alert-error">
               <span>{error}</span>
@@ -433,6 +433,7 @@ export default function App() {
           {route === "chat" && (
             <Chat
               session={current}
+              userName={user?.name?.split(" ")[0] ?? "there"}
               busy={busy}
               realMode={!mockMode}
               onSend={submitMessage}
@@ -574,32 +575,38 @@ function Overview({
       <section className="welcome-banner">
         <div className="welcome-copy">
           <span className="banner-kicker">
-            <Icon name="spark" size={15} /> YOUR THINKING, IN VIEW
+            <Icon name="spark" size={15} /> A MOMENT FOR YOURSELF
           </span>
           <h2>
-            Make room for a<br />
-            clearer next step.
+            Find a little more<br />
+            clarity in the noise.
           </h2>
           <p>
-            Work through a decision, untangle a challenge, or simply reflect on
-            what’s on your mind.
+            Start wherever you are. We’ll help you slow down, sort through the
+            moving pieces, and notice what matters.
           </p>
           <button className="button button-light" onClick={onStart}>
-            Begin a reflection <Icon name="arrow" size={15} />
+            Start with a thought <Icon name="arrow" size={15} />
           </button>
         </div>
-        <div className="banner-visual" aria-hidden="true">
-          <div className="orbit orbit-one" />
-          <div className="orbit orbit-two" />
-          <div className="orbit orbit-three" />
-          <div className="visual-core">
-            <Icon name="spark" size={27} />
+        <div className="orb-scene" aria-hidden="true">
+          <div className="orb-halo" />
+          <div className="orb-orbit orb-orbit-one" />
+          <div className="orb-orbit orb-orbit-two" />
+          <div className="orb-orbit orb-orbit-three" />
+          <div className="orb-shadow" />
+          <div className="orb-object">
+            <div className="orb-object-inner">
+              <Icon name="spark" size={33} />
+            </div>
           </div>
-          <span className="orbit-point point-one" />
-          <span className="orbit-point point-two" />
-          <span className="orbit-point point-three" />
+          <span className="orb-satellite orb-satellite-one" />
+          <span className="orb-satellite orb-satellite-two" />
+          <span className="orb-satellite orb-satellite-three" />
+          <div className="orb-caption orb-caption-one">PAUSE</div>
+          <div className="orb-caption orb-caption-two">NOTICE</div>
         </div>
-        <div className="banner-footnote">A PRIVATE SPACE TO THINK</div>
+        <div className="banner-footnote">YOUR SPACE TO THINK, AT YOUR PACE</div>
       </section>
       <section className="stats-grid">
         <Stat
@@ -621,51 +628,69 @@ function Overview({
           note="Time spent reflecting"
         />
       </section>
-      <div className="section-heading">
-        <div>
-          <h2>Recent reflections</h2>
-          <p>Your recent thinking, ready when you are.</p>
-        </div>
-        <button className="text-link" onClick={() => onNavigate("sessions")}>
-          View all sessions <Icon name="arrow" size={14} />
-        </button>
-      </div>
-      {sessions.length ? (
-        <div className="reflection-list">
-          {sessions.slice(0, 3).map((session, i) => (
-            <button
-              className="reflection-row"
-              key={session.id}
-              onClick={() => onOpen(session.id)}
-            >
-              <span className={`reflection-icon icon-tone-${i % 3}`}>
-                <Icon
-                  name={
-                    i === 0 ? "spark" : i === 1 ? "analysis" : "recommendations"
-                  }
-                  size={17}
-                />
-              </span>
-              <span className="reflection-meta">
-                <strong>{session.title}</strong>
-                <small>
-                  {session.topic} <span>·</span> {session.date}
-                </small>
-              </span>
-              <span className={`status ${session.status}`}>
-                {session.status === "completed" ? "Completed" : "In progress"}
-              </span>
-              <Icon name="chevron" size={17} />
+      <div className="dashboard-lower">
+        <section className="recent-panel">
+          <div className="section-heading">
+            <div>
+              <span className="section-overline">YOUR JOURNEY</span>
+              <h2>Recent reflections</h2>
+              <p>Pick up a thought you’ve already started.</p>
+            </div>
+            <button className="text-link" onClick={() => onNavigate("sessions")}>
+              See all <Icon name="arrow" size={14} />
             </button>
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          title="Your first reflection starts here"
-          text="Start a session to work through a decision or challenge."
-          action={onStart}
-        />
-      )}
+          </div>
+          {sessions.length ? (
+            <div className="reflection-list">
+              {sessions.slice(0, 3).map((session, i) => (
+                <button
+                  className="reflection-row"
+                  key={session.id}
+                  onClick={() => onOpen(session.id)}
+                >
+                  <span className={`reflection-icon icon-tone-${i % 3}`}>
+                    <Icon
+                      name={
+                        i === 0 ? "spark" : i === 1 ? "analysis" : "recommendations"
+                      }
+                      size={17}
+                    />
+                  </span>
+                  <span className="reflection-meta">
+                    <strong>{session.title}</strong>
+                    <small>
+                      {session.topic} <span>·</span> {session.date}
+                    </small>
+                  </span>
+                  <span className={`status ${session.status}`}>
+                    {session.status === "completed" ? "Complete" : "In progress"}
+                  </span>
+                  <Icon name="chevron" size={17} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Your first reflection starts here"
+              text="Start with one thing that’s been on your mind lately."
+              action={onStart}
+            />
+          )}
+        </section>
+        <aside className="question-card">
+          <div className="question-art" aria-hidden="true">
+            <span className="question-art-ring question-art-ring-one" />
+            <span className="question-art-ring question-art-ring-two" />
+            <span className="question-art-core"><Icon name="spark" size={19} /></span>
+          </div>
+          <span className="section-overline">A GENTLE PLACE TO BEGIN</span>
+          <h2>What feels most worth understanding today?</h2>
+          <p>No perfect answer needed. Just start with what’s real for you.</p>
+          <button className="text-link" onClick={onStart}>
+            Explore this <Icon name="arrow" size={14} />
+          </button>
+        </aside>
+      </div>
       <div className="gentle-note">
         <span className="note-spark">
           <Icon name="spark" size={16} />
@@ -860,24 +885,24 @@ function Sessions({
 }
 function Chat({
   session,
+  userName,
   busy,
   realMode,
   onSend,
   onComplete,
 }: {
   session?: Session;
+  userName: string;
   busy: boolean;
   realMode: boolean;
   onSend: (t: string) => void;
   onComplete: () => void;
 }) {
   const [text, setText] = useState("");
-  const bottomRef = useMemo(
-    () => ({ current: null as HTMLDivElement | null }),
-    [],
-  );
+  const messagesRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const messages = messagesRef.current;
+    messages?.scrollTo({ top: messages.scrollHeight, behavior: "smooth" });
   }, [session?.messages.length, busy]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -926,7 +951,7 @@ function Chat({
         </div>
       </div>
       <div className="chat-card">
-        <div className="chat-messages">
+        <div className="chat-messages" ref={messagesRef}>
           {session?.messages.length ? (
             session.messages.map((message, index) => (
               <MessageBubble key={message.id} message={message} index={index} />
@@ -936,22 +961,12 @@ function Chat({
               <span className="chat-orb">
                 <Icon name="spark" size={22} />
               </span>
-              <h2>What’s on your mind?</h2>
+              <span className="chat-greeting">Hello, {userName}</span>
+              <h2>What would you like to untangle?</h2>
               <p>
-                Start wherever you are. You can share a decision, a challenge,
-                or a thought you’d like to unpack.
+                A quiet space to think out loud. Bring a decision, a challenge,
+                or anything you’d like to see more clearly.
               </p>
-              <div className="prompt-chips">
-                {[
-                  "I’m weighing two options…",
-                  "I feel stuck on…",
-                  "Help me think through…",
-                ].map((item) => (
-                  <button key={item} onClick={() => setText(item)}>
-                    {item}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
           {busy && !realMode && (
@@ -967,7 +982,6 @@ function Chat({
               <small>Finding a helpful question…</small>
             </div>
           )}
-          <div ref={(el) => (bottomRef.current = el)} />
         </div>
         <form className="composer" onSubmit={submit}>
           <textarea
@@ -996,6 +1010,21 @@ function Chat({
             </button>
           </div>
         </form>
+        {!session?.messages.length && (
+          <div className="chat-prompt-grid" aria-label="Suggested starting points">
+            {[
+              ["Untangle a decision", "Lay out the options and what matters most.", "I’m weighing a decision about…"],
+              ["Find the real blocker", "Name what feels difficult to move through.", "I feel stuck because…"],
+              ["Choose a next step", "Turn a big question into one small action.", "A next step I could take is…"],
+            ].map(([title, detail, prompt], index) => (
+              <button className="chat-prompt-card" key={title} onClick={() => setText(prompt)}>
+                <span className="prompt-card-icon"><Icon name={index === 0 ? "analysis" : index === 1 ? "spark" : "arrow"} size={15} /></span>
+                <strong>{title}</strong>
+                <small>{detail}</small>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <p className="chat-disclaimer">
         <Icon name="lock" size={13} />
