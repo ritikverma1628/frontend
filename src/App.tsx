@@ -65,7 +65,7 @@ const greeting = () => {
 
 export default function App() {
   const [route, setRoute] = useState<Route>(() =>
-    import.meta.env.VITE_USE_MOCK_API === "false"
+    !mockMode
       ? "auth"
       : (location.hash.replace("#/", "") as Route) || "overview",
   );
