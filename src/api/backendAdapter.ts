@@ -1,4 +1,4 @@
-import type { Analysis, Pattern, Session } from "../types";
+import type { Analysis, Message, Pattern, Session } from "../types";
 
 export type ReasoningItem = { text: string; evidence: string };
 export type Reasoning = {
@@ -13,6 +13,13 @@ export type StoredSession = {
   created_at: string;
   session_text: string;
   reasoning: Reasoning;
+};
+export type StoredDraft = {
+  session_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: Message[];
 };
 export type WorkflowResponse = {
   session_id: string;
@@ -48,6 +55,10 @@ export type WorkflowResponse = {
 };
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+// Keep aligned with backend/app/schemas.py: ChatMessage and ChatRequest.
+export const CHAT_MESSAGE_MAX_LENGTH = 4000;
+export const CHAT_MESSAGES_MAX_LENGTH = 40;
+
 type AdapterOptions = {
   baseUrl: string;
   getAccessToken: () => string | undefined;
@@ -79,6 +90,19 @@ export function toSession(record: StoredSession): Session {
       content: record.session_text,
       createdAt: Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     }],
+  };
+}
+
+export function toDraftSession(record: StoredDraft): Session {
+  const date = new Date(record.updated_at || record.created_at);
+  return {
+    id: record.session_id,
+    title: record.title,
+    topic: "Reflection",
+    date: Number.isNaN(date.getTime()) ? "Draft" : date.toLocaleString(),
+    status: "in_progress",
+    duration: "Draft",
+    messages: record.messages,
   };
 }
 
@@ -132,13 +156,42 @@ export function createBackendAdapter({ baseUrl, getAccessToken, fetcher = fetch 
       throw new Error("Could not reach the Cognitrace service. Check your connection and try again.");
     }
     if (!response.ok) throw new Error(requestError(response.status));
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
 
   return {
+    async listDrafts(): Promise<StoredDraft[]> {
+      return request<StoredDraft[]>("/sessions/drafts");
+    },
+    async createDraft(sessionId: string, title: string): Promise<StoredDraft> {
+      return request<StoredDraft>("/sessions/drafts", {
+        method: "POST",
+        body: JSON.stringify({ session_id: sessionId, title }),
+      });
+    },
+    async updateDraft(sessionId: string, title: string, messages: Message[]): Promise<StoredDraft> {
+      return request<StoredDraft>(`/sessions/drafts/${encodeURIComponent(sessionId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title, messages }),
+      });
+    },
+    async deleteDraft(sessionId: string): Promise<void> {
+      await request<void>(`/sessions/drafts/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+    },
     async listSessions(): Promise<Session[]> {
-      const page = await request<{ items: StoredSession[]; limit: number; offset: number }>("/sessions?limit=100&offset=0");
-      return page.items.map(toSession);
+      const records: StoredSession[] = [];
+      const pageSize = 100;
+      let offset = 0;
+      while (true) {
+        const page = await request<{ items: StoredSession[]; limit: number; offset: number }>(
+          `/sessions?limit=${pageSize}&offset=${offset}`,
+        );
+        records.push(...page.items);
+        offset += page.items.length;
+        if (page.items.length < page.limit) break;
+      }
+      return records.map(toSession);
     },
     async getSession(sessionId: string): Promise<StoredSession> {
       return request<StoredSession>("/sessions/" + encodeURIComponent(sessionId));

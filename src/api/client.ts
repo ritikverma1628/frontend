@@ -3,11 +3,13 @@ import type { Analysis, Message, Pattern, Session, User } from "../types";
 import {
   createBackendAdapter,
   toAnalysis,
+  toDraftSession,
   toPatterns,
   toSession,
   type WorkflowResponse,
 } from "./backendAdapter";
 import { shouldUseMockApi } from "./mode";
+import { formatUserTranscript } from "./transcript";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "https://cognitrace-ai.onrender.com/api";
 export const mockMode = shouldUseMockApi(
@@ -20,7 +22,7 @@ const supabase = supabaseUrl && supabasePublishableKey
   ? createClient(supabaseUrl, supabasePublishableKey, {
       auth: {
         autoRefreshToken: true,
-        persistSession: false,
+        persistSession: true,
         detectSessionInUrl: false,
       },
     })
@@ -81,7 +83,18 @@ function requireSupabase() {
   return supabase;
 }
 
+async function restoreAuth(): Promise<User | null> {
+  if (mockMode) return { id: "u-demo", name: "Alex Morgan", email: "alex@example.com" };
+  const client = requireSupabase();
+  const { data, error } = await client.auth.getSession();
+  if (error) throw new Error("Your saved sign-in could not be restored. Please sign in again.");
+  accessToken = data.session?.access_token;
+  currentUser = data.session?.user ? toUser(data.session.user) : undefined;
+  return currentUser ?? null;
+}
+
 export const api = {
+  restoreAuth,
   async me(): Promise<User> {
     if (mockMode) { await demoWait(); return { id: "u-demo", name: "Alex Morgan", email: "alex@example.com" }; }
     if (!currentUser || !accessToken) throw new Error("Please sign in to continue.");
@@ -104,7 +117,16 @@ export const api = {
   },
   async sessions(): Promise<Session[]> {
     if (mockMode) { await demoWait(); return readDemoSessions(); }
-    return [...drafts.values(), ...await backend.listSessions()];
+    const [storedDrafts, completed] = await Promise.all([
+      backend.listDrafts(),
+      backend.listSessions(),
+    ]);
+    drafts.clear();
+    for (const draft of storedDrafts) {
+      const session = toDraftSession(draft);
+      drafts.set(session.id, session);
+    }
+    return [...storedDrafts.map(toDraftSession), ...completed];
   },
   async createSession(topic: string): Promise<Session> {
     if (mockMode) {
@@ -113,7 +135,8 @@ export const api = {
       await demoWait();
       return session;
     }
-    const session: Session = { id: crypto.randomUUID(), title: topic, topic: "Completed transcript", date: "Not saved yet", status: "in_progress", duration: "Draft", messages: [] };
+    const session: Session = { id: crypto.randomUUID(), title: topic, topic: "Reflection", date: "Just now", status: "in_progress", duration: "Draft", messages: [] };
+    await backend.createDraft(session.id, session.title);
     drafts.set(session.id, session);
     return session;
   },
@@ -131,7 +154,19 @@ export const api = {
     }
     const draft = drafts.get(sessionId);
     if (!draft) throw new Error("Only an unsaved transcript can receive new notes.");
-    draft.messages.push({ id: crypto.randomUUID(), role: "user", content, createdAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) });
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content,
+      createdAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    };
+    draft.messages.push(userMessage);
+    try {
+      await backend.updateDraft(sessionId, draft.title, draft.messages);
+    } catch (error) {
+      draft.messages.pop();
+      throw error;
+    }
     const reply = await backend.chat(
       draft.messages.map(({ role, content: message }) => ({ role, content: message })),
     );
@@ -141,6 +176,7 @@ export const api = {
       content: reply,
       createdAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
     });
+    await backend.updateDraft(sessionId, draft.title, draft.messages);
     return [...draft.messages];
   },
   async completeSession(sessionId: string): Promise<string> {
@@ -154,8 +190,10 @@ export const api = {
     }
     const draft = drafts.get(sessionId);
     if (!draft || !draft.messages.length) throw new Error("Add at least one note before submitting the transcript.");
-    const transcript = draft.messages.map((message) => message.content).join("\n\n");
+    const transcript = formatUserTranscript(draft.messages);
+    if (!transcript) throw new Error("Add at least one note before submitting the transcript.");
     const result: WorkflowResponse = await backend.submitTranscript(transcript);
+    await backend.deleteDraft(sessionId);
     drafts.delete(sessionId);
     completedAnalysis.set(result.session_id, toAnalysis(result.reasoning, result.detected_patterns[0]?.reflection_question));
     recentPatterns = toPatterns(result);

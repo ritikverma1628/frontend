@@ -92,32 +92,62 @@ export default function App() {
     return () => removeEventListener("hashchange", onHash);
   }, []);
   useEffect(() => {
-    if (route === "auth") {
-      setLoading(false);
-      return;
-    }
-    Promise.all([
-      api.me(),
-      api.sessions(),
-      api.patterns(),
-      api.recommendations(),
-    ])
-      .then(([u, s, p, r]) => {
-        setUser(u);
+    let mounted = true;
+    const initialize = async () => {
+      try {
+        let restoredUser: User | null;
+        if (!mockMode) {
+          restoredUser = await api.restoreAuth();
+          if (!mounted) return;
+          if (!restoredUser) {
+            setRoute("auth");
+            return;
+          }
+        } else {
+          if (route === "auth") return;
+          restoredUser = await api.me();
+        }
+        const [s, p, r] = await Promise.all([
+          api.sessions(),
+          api.patterns(),
+          api.recommendations(),
+        ]);
+        if (!mounted) return;
+        setUser(restoredUser);
         setSessions(s);
-        setActiveSession((current) =>
-          s.some((session) => session.id === current) ? current : s[0]?.id ?? "",
+        const storedSessionId = localStorage.getItem(
+          `cognitrace.activeSession.${restoredUser.id}`,
+        );
+        setActiveSession(
+          s.some((session) => session.id === storedSessionId)
+            ? storedSessionId!
+            : s[0]?.id ?? "",
         );
         setPatterns(p);
         setRecommendations(r);
-      })
-      .catch((e) =>
-        setError(
-          e instanceof Error ? e.message : "Could not load your workspace.",
-        ),
-      )
-      .finally(() => setLoading(false));
+        if (!mockMode) {
+          const requestedRoute = location.hash.replace(/^#\/?/, "") as Route;
+          const validRoutes: Route[] = ["overview", "sessions", "analysis", "patterns", "recommendations", "settings", "chat"];
+          setRoute(validRoutes.includes(requestedRoute) ? requestedRoute : "overview");
+        }
+      } catch (e) {
+        if (mounted) {
+          setError(e instanceof Error ? e.message : "Could not restore your workspace.");
+          if (!mockMode) setRoute("auth");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void initialize();
+    return () => {
+      mounted = false;
+    };
   }, []);
+  useEffect(() => {
+    if (user?.id && activeSession)
+      localStorage.setItem(`cognitrace.activeSession.${user.id}`, activeSession);
+  }, [user?.id, activeSession]);
   useEffect(() => {
     if (route !== "analysis" || loading) return;
     const selectedSession = sessions.find((session) => session.id === activeSession);
@@ -233,7 +263,7 @@ export default function App() {
       setError("Feedback could not be saved.");
     }
   };
-  if (loading && route !== "auth")
+  if (loading && (route !== "auth" || !mockMode))
     return (
       <div className="loading-screen">
         <div className="brand-mark">
@@ -257,6 +287,7 @@ export default function App() {
               api.recommendations(),
             ]);
             setSessions(s);
+            setActiveSession(s[0]?.id ?? "");
             setPatterns(p);
             setRecommendations(r);
             navigate("overview");
