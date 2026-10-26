@@ -895,20 +895,35 @@ function Chat({
   userName: string;
   busy: boolean;
   realMode: boolean;
-  onSend: (t: string) => void;
+  onSend: (t: string) => Promise<void>;
   onComplete: () => void;
 }) {
   const [text, setText] = useState("");
+  const [pendingMessage, setPendingMessage] = useState<Message | null>(null);
+  const [waitingForReply, setWaitingForReply] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const messages = messagesRef.current;
     messages?.scrollTo({ top: messages.scrollHeight, behavior: "smooth" });
-  }, [session?.messages.length, busy]);
-  const submit = (e: FormEvent) => {
+  }, [session?.messages.length, busy, pendingMessage?.id]);
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (text.trim() && !busy) {
-      onSend(text);
+      const content = text.trim();
+      setPendingMessage({
+        id: crypto.randomUUID(),
+        role: "user",
+        content,
+        createdAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      });
       setText("");
+      setWaitingForReply(true);
+      try {
+        await onSend(content);
+      } finally {
+        setPendingMessage(null);
+        setWaitingForReply(false);
+      }
     }
   };
   return (
@@ -952,10 +967,18 @@ function Chat({
       </div>
       <div className="chat-card">
         <div className="chat-messages" ref={messagesRef}>
-          {session?.messages.length ? (
-            session.messages.map((message, index) => (
-              <MessageBubble key={message.id} message={message} index={index} />
-            ))
+          {session?.messages.length || pendingMessage ? (
+            <>
+              {session?.messages.map((message, index) => (
+                <MessageBubble key={message.id} message={message} index={index} />
+              ))}
+              {pendingMessage && (
+                <MessageBubble
+                  message={pendingMessage}
+                  index={session?.messages.length ?? 0}
+                />
+              )}
+            </>
           ) : (
             <div className="chat-empty">
               <span className="chat-orb">
@@ -969,17 +992,22 @@ function Chat({
               </p>
             </div>
           )}
-          {busy && !realMode && (
-            <div className="typing-row">
-              <span className="assistant-avatar">
+          {waitingForReply && (
+            <div className="message-row assistant-row response-pending" role="status" aria-live="polite">
+              <div className="message-avatar">
                 <Icon name="spark" size={14} />
-              </span>
-              <span className="typing-dots">
-                <i />
-                <i />
-                <i />
-              </span>
-              <small>Finding a helpful question…</small>
+              </div>
+              <div className="message-content">
+                <div className="message-byline">Cognitrace <span>composing</span></div>
+                <div className="bubble assistant-bubble response-generating">
+                  <div className="response-generating-title">
+                    <span className="response-pulse"><i /><i /><i /></span>
+                    {realMode ? "Thinking through your note" : "Finding a helpful question"}
+                  </div>
+                  <div className="response-skeleton" aria-hidden="true"><i /><i /><i /></div>
+                  <small>{realMode ? "Connecting the details you shared…" : "Putting a thoughtful reply together…"}</small>
+                </div>
+              </div>
             </div>
           )}
         </div>
