@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBackendAdapter, toAnalysis, type Reasoning } from "./backendAdapter";
+import { shouldUseMockApi } from "./mode";
 
 const reasoning: Reasoning = {
   problem: { text: "Find shortest path", evidence: "find shortest path" },
@@ -8,6 +9,18 @@ const reasoning: Reasoning = {
   alternatives_considered: [],
   assumptions: [],
 };
+
+describe("frontend API mode", () => {
+  it("defaults local development to mock mode and hosted builds to the API", () => {
+    expect(shouldUseMockApi(undefined, false)).toBe(true);
+    expect(shouldUseMockApi(undefined, true)).toBe(false);
+  });
+
+  it("honors an explicit mode in either environment", () => {
+    expect(shouldUseMockApi("true", true)).toBe(true);
+    expect(shouldUseMockApi("false", false)).toBe(false);
+  });
+});
 
 describe("backend API adapter", () => {
   it("posts a completed transcript using the real request schema and a bearer header", async () => {

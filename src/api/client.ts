@@ -7,9 +7,13 @@ import {
   toSession,
   type WorkflowResponse,
 } from "./backendAdapter";
+import { shouldUseMockApi } from "./mode";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "https://cognitrace-ai.onrender.com/api";
-export const mockMode = import.meta.env.VITE_USE_MOCK_API !== "false";
+export const mockMode = shouldUseMockApi(
+  import.meta.env.VITE_USE_MOCK_API,
+  import.meta.env.PROD,
+);
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const supabase = supabaseUrl && supabasePublishableKey
