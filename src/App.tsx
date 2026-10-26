@@ -105,6 +105,9 @@ export default function App() {
       .then(([u, s, p, r]) => {
         setUser(u);
         setSessions(s);
+        setActiveSession((current) =>
+          s.some((session) => session.id === current) ? current : s[0]?.id ?? "",
+        );
         setPatterns(p);
         setRecommendations(r);
       })
@@ -116,16 +119,36 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => {
-    if (route === "analysis" && activeSession)
-      api
-        .analysis(activeSession)
-        .then(setAnalysis)
-        .catch((e) =>
+    if (route !== "analysis" || loading) return;
+    const selectedSession = sessions.find((session) => session.id === activeSession);
+    if (!selectedSession) {
+      setError("Choose a saved session to open its reflection.");
+      setRoute("sessions");
+      location.hash = "/sessions";
+      return;
+    }
+    if (selectedSession.status !== "completed") {
+      setError("");
+      setRoute("chat");
+      location.hash = "/chat";
+      return;
+    }
+    let current = true;
+    api
+      .analysis(activeSession)
+      .then((result) => {
+        if (current) setAnalysis(result);
+      })
+      .catch((e) => {
+        if (current)
           setError(
             e instanceof Error ? e.message : "Could not load this reflection.",
-          ),
-        );
-  }, [route, activeSession]);
+          );
+      });
+    return () => {
+      current = false;
+    };
+  }, [route, activeSession, loading, sessions]);
   const navigate = (next: Route) => {
     setRoute(next);
     location.hash = `/${next}`;
