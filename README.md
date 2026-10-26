@@ -7,7 +7,7 @@ React + TypeScript + Vite frontend for Cognitrace. Existing screens and styling 
 ~~~powershell
 cd frontend
 npm ci
-Copy-Item .env.example .env.local
+Copy-Item .env.local.example .env.local
 npm run dev
 ~~~
 
@@ -42,6 +42,8 @@ Add these as frontend **build environment variables** in the hosting provider, t
 - `VITE_SUPABASE_PUBLISHABLE_KEY` set to that project's publishable key
 
 The frontend cannot authenticate against the backend until the Supabase values are real. The backend's `CORS_ALLOWED_ORIGINS` must include the exact hosted frontend origin. Never place Gemini, database, or Supabase service-role secrets in frontend variables.
+
+To change the backend host without editing source code, copy `.env.local.example` to `.env.local` and edit `VITE_API_BASE_URL`. For a hosted build, set the same variable in the hosting provider's build settings. A `127.0.0.1` or `localhost` URL refers to the computer opening the site; it only reaches your development backend from your own browser, and the backend must allow the exact hosted origin through CORS.
 
 ## Current backend mapping
 
