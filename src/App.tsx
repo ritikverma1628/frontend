@@ -51,6 +51,17 @@ const navItems: { id: Route; label: string; icon: string }[] = [
   { id: "recommendations", label: "For you", icon: "recommendations" },
 ];
 const shortDate = (value: string) => value.split(" · ")[0];
+const todayLabel = new Intl.DateTimeFormat(undefined, {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+}).format(new Date());
+const greeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+};
 
 export default function App() {
   const [route, setRoute] = useState<Route>(() =>
@@ -551,8 +562,8 @@ function Overview({
   return (
     <>
       <PageHeading
-        eyebrow="THURSDAY, OCTOBER 22"
-        title={`Good morning${user?.name ? `, ${user.name.split(" ")[0]}` : ""}.`}
+        eyebrow={todayLabel.toUpperCase()}
+        title={`${greeting()}${user?.name ? `, ${user.name.split(" ")[0]}` : ""}.`}
         text="A little space to think things through, one decision at a time."
         action={
           <button className="button button-primary" onClick={onStart}>
