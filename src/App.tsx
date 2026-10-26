@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api, clearAuth, mockMode } from "./api/client";
 import type { Analysis, Message, Pattern, Route, Session, User } from "./types";
 
@@ -247,7 +247,7 @@ export default function App() {
     );
 
   return (
-    <div className="app-shell app-shell-rebuilt">
+    <div className="app-shell app-shell-studio">
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <a className="brand" href="#/overview">
           <span className="brand-mark">
@@ -433,6 +433,7 @@ export default function App() {
           {route === "chat" && (
             <Chat
               session={current}
+              userName={user?.name?.split(" ")[0] ?? "there"}
               busy={busy}
               realMode={!mockMode}
               onSend={submitMessage}
@@ -884,24 +885,24 @@ function Sessions({
 }
 function Chat({
   session,
+  userName,
   busy,
   realMode,
   onSend,
   onComplete,
 }: {
   session?: Session;
+  userName: string;
   busy: boolean;
   realMode: boolean;
   onSend: (t: string) => void;
   onComplete: () => void;
 }) {
   const [text, setText] = useState("");
-  const bottomRef = useMemo(
-    () => ({ current: null as HTMLDivElement | null }),
-    [],
-  );
+  const messagesRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const messages = messagesRef.current;
+    messages?.scrollTo({ top: messages.scrollHeight, behavior: "smooth" });
   }, [session?.messages.length, busy]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -950,7 +951,7 @@ function Chat({
         </div>
       </div>
       <div className="chat-card">
-        <div className="chat-messages">
+        <div className="chat-messages" ref={messagesRef}>
           {session?.messages.length ? (
             session.messages.map((message, index) => (
               <MessageBubble key={message.id} message={message} index={index} />
@@ -960,22 +961,12 @@ function Chat({
               <span className="chat-orb">
                 <Icon name="spark" size={22} />
               </span>
-              <h2>What’s on your mind?</h2>
+              <span className="chat-greeting">Hello, {userName}</span>
+              <h2>What would you like to untangle?</h2>
               <p>
-                Start wherever you are. You can share a decision, a challenge,
-                or a thought you’d like to unpack.
+                A quiet space to think out loud. Bring a decision, a challenge,
+                or anything you’d like to see more clearly.
               </p>
-              <div className="prompt-chips">
-                {[
-                  "I’m weighing two options…",
-                  "I feel stuck on…",
-                  "Help me think through…",
-                ].map((item) => (
-                  <button key={item} onClick={() => setText(item)}>
-                    {item}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
           {busy && !realMode && (
@@ -991,7 +982,6 @@ function Chat({
               <small>Finding a helpful question…</small>
             </div>
           )}
-          <div ref={(el) => (bottomRef.current = el)} />
         </div>
         <form className="composer" onSubmit={submit}>
           <textarea
@@ -1020,6 +1010,21 @@ function Chat({
             </button>
           </div>
         </form>
+        {!session?.messages.length && (
+          <div className="chat-prompt-grid" aria-label="Suggested starting points">
+            {[
+              ["Untangle a decision", "Lay out the options and what matters most.", "I’m weighing a decision about…"],
+              ["Find the real blocker", "Name what feels difficult to move through.", "I feel stuck because…"],
+              ["Choose a next step", "Turn a big question into one small action.", "A next step I could take is…"],
+            ].map(([title, detail, prompt], index) => (
+              <button className="chat-prompt-card" key={title} onClick={() => setText(prompt)}>
+                <span className="prompt-card-icon"><Icon name={index === 0 ? "analysis" : index === 1 ? "spark" : "arrow"} size={15} /></span>
+                <strong>{title}</strong>
+                <small>{detail}</small>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <p className="chat-disclaimer">
         <Icon name="lock" size={13} />
